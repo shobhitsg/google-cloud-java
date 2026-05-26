@@ -15,6 +15,9 @@
  */
 
 package com.google.cloud.spanner;
+ 
+import com.google.spanner.v1.TransactionOptions.IsolationLevel;
+import com.google.spanner.v1.TransactionOptions.ReadWrite.ReadLockMode;
 
 import static com.google.cloud.spanner.SpannerExceptionFactory.newSpannerBatchUpdateException;
 import static com.google.cloud.spanner.SpannerExceptionFactory.newSpannerException;
@@ -222,7 +225,18 @@ class TransactionRunnerImpl implements SessionTransaction, TransactionRunner {
     private CommitResponse commitResponse;
     private final Clock clock;
 
+    private final boolean routeToLeader;
     private final Map<SpannerRpc.Option, ?> channelHint;
+
+    private static class TransactionMode {
+      final IsolationLevel isolationLevel;
+      final ReadLockMode readLockMode;
+
+      TransactionMode(IsolationLevel isolationLevel, ReadLockMode readLockMode) {
+        this.isolationLevel = isolationLevel;
+        this.readLockMode = readLockMode;
+      }
+    }
 
     private TransactionContextImpl(Builder builder) {
       super(builder);
@@ -237,6 +251,56 @@ class TransactionRunnerImpl implements SessionTransaction, TransactionRunner {
               ThreadLocalRandom.current().nextLong(Long.MAX_VALUE),
               session.getSpanner().getOptions().isGrpcGcpExtensionEnabled());
       this.previousTransactionId = builder.previousTransactionId;
+
+      TransactionMode effectiveMode = resolveEffectiveMode(this.options);
+      this.routeToLeader = !canEnableLRYW(effectiveMode);
+    }
+
+    private TransactionMode resolveEffectiveMode(Options callSite) {
+      IsolationLevel iso = callSite.isolationLevel();
+      ReadLockMode lock = callSite.readLockMode();
+
+      if (isUnspecified(iso)) {
+        iso = session.getSpanner().getOptions().getDefaultTransactionOptions().getIsolationLevel();
+      }
+      if (isUnspecified(lock)) {
+        lock = session.getSpanner().getOptions().getDefaultTransactionOptions().getReadWrite().getReadLockMode();
+      }
+
+      DatabaseMetadata dbDefaults = null;
+      if (session.getSessionReference() != null) {
+        dbDefaults = session.getSessionReference().getDatabaseMetadata();
+      }
+      if (dbDefaults != null) {
+        if (isUnspecified(iso)) {
+          iso = dbDefaults.getIsolationLevel();
+        }
+        if (isUnspecified(lock)) {
+          lock = dbDefaults.getReadLockMode();
+        }
+      }
+
+      if (isUnspecified(iso)) {
+        iso = IsolationLevel.SERIALIZABLE;
+      }
+      if (isUnspecified(lock) && iso != IsolationLevel.REPEATABLE_READ) {
+        lock = ReadLockMode.PESSIMISTIC;
+      }
+
+      return new TransactionMode(iso, lock);
+    }
+
+    private boolean isUnspecified(IsolationLevel level) {
+      return level == null || level == IsolationLevel.ISOLATION_LEVEL_UNSPECIFIED || level == IsolationLevel.UNRECOGNIZED;
+    }
+
+    private boolean isUnspecified(ReadLockMode mode) {
+      return mode == null || mode == ReadLockMode.READ_LOCK_MODE_UNSPECIFIED || mode == ReadLockMode.UNRECOGNIZED;
+    }
+
+    private boolean canEnableLRYW(TransactionMode mode) {
+      return mode.readLockMode == ReadLockMode.OPTIMISTIC
+          || (mode.isolationLevel == IsolationLevel.REPEATABLE_READ && mode.readLockMode == ReadLockMode.READ_LOCK_MODE_UNSPECIFIED);
     }
 
     @Override
@@ -246,7 +310,7 @@ class TransactionRunnerImpl implements SessionTransaction, TransactionRunner {
 
     @Override
     protected boolean isRouteToLeader() {
-      return true;
+      return routeToLeader;
     }
 
     private void increaseAsyncOperations() {

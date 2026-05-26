@@ -30,6 +30,8 @@ import com.google.cloud.spanner.SpannerException.ResourceNotFoundException;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.spanner.v1.BatchWriteResponse;
+import com.google.spanner.v1.TransactionOptions.IsolationLevel;
+import com.google.spanner.v1.TransactionOptions.ReadWrite.ReadLockMode;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -49,25 +51,31 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * {@link DatabaseClient} implementation that uses a single multiplexed session to execute
+ * {@link DatabaseClient} implementation that uses a single multiplexed session
+ * to execute
  * transactions.
  */
 final class MultiplexedSessionDatabaseClient extends AbstractMultiplexedSessionDatabaseClient {
   /**
-   * The maximum number of attempts that the client will try to execute CreateSession for the
-   * initial multiplexed session. This value is only used for the very first multiplexed session
-   * that is created, and it is only used if the application has not set a waitForMinSessions value.
-   * If waitForMinSessions has been set, then the client will retry until the duration in
+   * The maximum number of attempts that the client will try to execute
+   * CreateSession for the
+   * initial multiplexed session. This value is only used for the very first
+   * multiplexed session
+   * that is created, and it is only used if the application has not set a
+   * waitForMinSessions value.
+   * If waitForMinSessions has been set, then the client will retry until the
+   * duration in
    * waitForMinSessions has been reached.
    */
   private static final int MAX_INITIAL_CREATE_SESSION_ATTEMPTS = 10;
 
   @VisibleForTesting
-  static final Statement DETERMINE_DIALECT_STATEMENT =
+  static final Statement DETERMINE_METADATA_STATEMENT =
       Statement.newBuilder(
-              "select option_value "
-                  + "from information_schema.database_options "
-                  + "where option_name='database_dialect'")
+              "SELECT OPTION_NAME, OPTION_VALUE "
+                  + "FROM INFORMATION_SCHEMA.DATABASE_OPTIONS "
+                  + "WHERE OPTION_NAME IN ('default_transaction_isolation', "
+                  + "'default_read_lock_mode', 'database_dialect')")
           .build();
 
   /**
@@ -278,7 +286,12 @@ final class MultiplexedSessionDatabaseClient extends AbstractMultiplexedSessionD
                 .getOptions()
                 .getSessionPoolOptions()
                 .isAutoDetectDialect()) {
-              MAINTAINER_SERVICE.submit(() -> getDialect());
+              MAINTAINER_SERVICE.submit(() -> {
+                try {
+                  metadataSupplier.get();
+                } catch (Exception ignore) {
+                }
+              });
             }
           }
 
@@ -289,7 +302,8 @@ final class MultiplexedSessionDatabaseClient extends AbstractMultiplexedSessionD
                 && (spannerException instanceof DatabaseNotFoundException
                     || spannerException instanceof InstanceNotFoundException
                     || spannerException instanceof SessionNotFoundException)) {
-              // This could in theory set this field more than once, but we don't want to bother
+              // This could in theory set this field more than once, but we don't want to
+              // bother
               // with synchronizing, as it does not really matter exactly which error is set.
               MultiplexedSessionDatabaseClient.this.resourceNotFoundException.set(
                   (ResourceNotFoundException) spannerException);
@@ -334,15 +348,16 @@ final class MultiplexedSessionDatabaseClient extends AbstractMultiplexedSessionD
         } catch (InterruptedException interruptedException) {
           lastException = SpannerExceptionFactory.propagateInterrupt(interruptedException);
         } catch (TimeoutException timeoutException) {
-          lastException =
-              SpannerExceptionFactory.newSpannerException(
-                  ErrorCode.DEADLINE_EXCEEDED,
-                  "Timed out after waiting "
-                      + waitDuration.toMillis()
-                      + "ms for multiplexed session creation");
+          lastException = SpannerExceptionFactory.newSpannerException(
+              ErrorCode.DEADLINE_EXCEEDED,
+              "Timed out after waiting "
+                  + waitDuration.toMillis()
+                  + "ms for multiplexed session creation");
         }
-        // if any exception is thrown, then set the session reference to null to retry the
-        // multiplexed session creation only if the error code is DEADLINE EXCEEDED, UNAVAILABLE or
+        // if any exception is thrown, then set the session reference to null to retry
+        // the
+        // multiplexed session creation only if the error code is DEADLINE EXCEEDED,
+        // UNAVAILABLE or
         // RESOURCE_EXHAUSTED
         if (RETRYABLE_ERROR_CODES.contains(lastException.getErrorCode())) {
           sessionReferenceFuture = null;
@@ -350,7 +365,8 @@ final class MultiplexedSessionDatabaseClient extends AbstractMultiplexedSessionD
           break;
         }
       }
-      // if the wait time elapsed and multiplexed session fetch failed then throw the last exception
+      // if the wait time elapsed and multiplexed session fetch failed then throw the
+      // last exception
       // that we have received
       if (lastException != null) {
         throw lastException;
@@ -409,10 +425,14 @@ final class MultiplexedSessionDatabaseClient extends AbstractMultiplexedSessionD
   }
 
   /**
-   * Returns true if the multiplexed session has been created. This client can be used before the
-   * session has been created, and will in that case use a delayed transaction that contains a
-   * future reference to the multiplexed session. The delayed transaction will block at the first
-   * actual statement that is being executed (e.g. the first query that is sent to Spanner).
+   * Returns true if the multiplexed session has been created. This client can be
+   * used before the
+   * session has been created, and will in that case use a delayed transaction
+   * that contains a
+   * future reference to the multiplexed session. The delayed transaction will
+   * block at the first
+   * actual statement that is being executed (e.g. the first query that is sent to
+   * Spanner).
    */
   private boolean isMultiplexedSessionCreated() {
     return multiplexedSessionReference.get().isDone();
@@ -428,16 +448,18 @@ final class MultiplexedSessionDatabaseClient extends AbstractMultiplexedSessionD
   private MultiplexedSessionTransaction createDirectMultiplexedSessionTransaction(
       boolean singleUse) {
     try {
-      int singleUseChannelHint =
-          singleUse && !sessionClient.getSpanner().getOptions().isGrpcGcpExtensionEnabled()
-              ? getSingleUseChannelHint()
-              : NO_CHANNEL_HINT;
+      int singleUseChannelHint = singleUse && !sessionClient.getSpanner().getOptions().isGrpcGcpExtensionEnabled()
+          ? getSingleUseChannelHint()
+          : NO_CHANNEL_HINT;
       return new MultiplexedSessionTransaction(
           this,
           tracer.getCurrentSpan(),
-          // Getting the result of the SettableApiFuture that contains the multiplexed session will
-          // also automatically propagate any error that happened during the creation of the
-          // session, such as for example a DatabaseNotFound exception. We therefore do not need
+          // Getting the result of the SettableApiFuture that contains the multiplexed
+          // session will
+          // also automatically propagate any error that happened during the creation of
+          // the
+          // session, such as for example a DatabaseNotFound exception. We therefore do
+          // not need
           // any special handling of such errors.
           multiplexedSessionReference.get().get(),
           singleUseChannelHint,
@@ -461,8 +483,10 @@ final class MultiplexedSessionDatabaseClient extends AbstractMultiplexedSessionD
     synchronized (this.channelUsage) {
       // Get the first unused channel.
       int channel = this.channelUsage.nextClearBit(/* fromIndex= */ 0);
-      // BitSet returns an index larger than its original size if all the bits are set.
-      // This then means that all channels have already been assigned to single-use transactions,
+      // BitSet returns an index larger than its original size if all the bits are
+      // set.
+      // This then means that all channels have already been assigned to single-use
+      // transactions,
       // and that we should not use a specific channel, but rather pick a random one.
       if (channel == this.numChannels) {
         return NO_CHANNEL_HINT;
@@ -472,24 +496,71 @@ final class MultiplexedSessionDatabaseClient extends AbstractMultiplexedSessionD
     }
   }
 
-  private final AbstractLazyInitializer<Dialect> dialectSupplier =
-      new AbstractLazyInitializer<Dialect>() {
+  private static Dialect parseDialect(String value) {
+    if (value == null) {
+      return Dialect.GOOGLE_STANDARD_SQL;
+    }
+    String normalized = value.toUpperCase().replace("_", "");
+    if ("POSTGRESQL".equals(normalized)) {
+      return Dialect.POSTGRESQL;
+    }
+    if ("GOOGLESTANDARDSQL".equals(normalized)) {
+      return Dialect.GOOGLE_STANDARD_SQL;
+    }
+    try {
+      return Dialect.fromName(value);
+    } catch (Exception e) {
+      return Dialect.GOOGLE_STANDARD_SQL;
+    }
+  }
+
+  private final AbstractLazyInitializer<DatabaseMetadata> metadataSupplier =
+      new AbstractLazyInitializer<DatabaseMetadata>() {
         @Override
-        protected Dialect initialize() {
-          try (ResultSet dialectResultSet = singleUse().executeQuery(DETERMINE_DIALECT_STATEMENT)) {
-            if (dialectResultSet.next()) {
-              return Dialect.fromName(dialectResultSet.getString(0));
+        protected DatabaseMetadata initialize() {
+          Dialect dialect = Dialect.GOOGLE_STANDARD_SQL;
+          IsolationLevel isolationLevel = IsolationLevel.SERIALIZABLE;
+          ReadLockMode readLockMode = ReadLockMode.PESSIMISTIC;
+
+          try (ResultSet resultSet = singleUse().executeQuery(DETERMINE_METADATA_STATEMENT)) {
+            while (resultSet.next()) {
+              String name = resultSet.getString(0);
+              String value = resultSet.getString(1);
+              if ("database_dialect".equalsIgnoreCase(name)) {
+                dialect = parseDialect(value);
+              } else if ("default_transaction_isolation".equalsIgnoreCase(name)) {
+                if ("repeatable read".equalsIgnoreCase(value)) {
+                  isolationLevel = IsolationLevel.REPEATABLE_READ;
+                } else if ("serializable".equalsIgnoreCase(value)) {
+                  isolationLevel = IsolationLevel.SERIALIZABLE;
+                }
+              } else if ("default_read_lock_mode".equalsIgnoreCase(name)) {
+                if ("optimistic".equalsIgnoreCase(value)) {
+                  readLockMode = ReadLockMode.OPTIMISTIC;
+                } else if ("pessimistic".equalsIgnoreCase(value)) {
+                  readLockMode = ReadLockMode.PESSIMISTIC;
+                }
+              }
             }
+          } catch (Exception exception) {
+            // Keep defaults on failure
           }
-          // This should not really happen, but it is the safest fallback value.
-          return Dialect.GOOGLE_STANDARD_SQL;
+          DatabaseMetadata metadata = new DatabaseMetadata(dialect, isolationLevel, readLockMode);
+          try {
+            Future<SessionReference> sessionRefFuture = multiplexedSessionReference.get();
+            if (sessionRefFuture != null && sessionRefFuture.isDone()) {
+              sessionRefFuture.get().setDatabaseMetadata(metadata);
+            }
+          } catch (Exception ignore) {
+          }
+          return metadata;
         }
       };
 
   @Override
   public Dialect getDialect() {
     try {
-      return dialectSupplier.get();
+      return metadataSupplier.get().getDialect();
     } catch (Exception exception) {
       throw SpannerExceptionFactory.asSpannerException(exception);
     }
@@ -497,7 +568,7 @@ final class MultiplexedSessionDatabaseClient extends AbstractMultiplexedSessionD
 
   Future<Dialect> getDialectAsync() {
     try {
-      return MAINTAINER_SERVICE.submit(dialectSupplier::get);
+      return MAINTAINER_SERVICE.submit(() -> metadataSupplier.get().getDialect());
     } catch (Exception exception) {
       throw SpannerExceptionFactory.asSpannerException(exception);
     }
@@ -597,17 +668,20 @@ final class MultiplexedSessionDatabaseClient extends AbstractMultiplexedSessionD
   }
 
   /**
-   * It is enough with one executor to maintain the multiplexed sessions in all the clients, as they
-   * do not need to be updated often, and the maintenance task is light. The core pool size is set
-   * to 1 to prevent continuous creating and tearing down threads, and to avoid high CPU usage when
-   * running on Java 8 due to <a href="https://bugs.openjdk.org/browse/JDK-8129861">
+   * It is enough with one executor to maintain the multiplexed sessions in all
+   * the clients, as they
+   * do not need to be updated often, and the maintenance task is light. The core
+   * pool size is set
+   * to 1 to prevent continuous creating and tearing down threads, and to avoid
+   * high CPU usage when
+   * running on Java 8 due to
+   * <a href="https://bugs.openjdk.org/browse/JDK-8129861">
    * https://bugs.openjdk.org/browse/JDK-8129861</a>.
    */
-  private static final ScheduledExecutorService MAINTAINER_SERVICE =
-      Executors.newScheduledThreadPool(
-          /* corePoolSize= */ 1,
-          ThreadFactoryUtil.createVirtualOrPlatformDaemonThreadFactory(
-              "multiplexed-session-maintainer", /* tryVirtual= */ false));
+  private static final ScheduledExecutorService MAINTAINER_SERVICE = Executors.newScheduledThreadPool(
+      /* corePoolSize= */ 1,
+      ThreadFactoryUtil.createVirtualOrPlatformDaemonThreadFactory(
+          "multiplexed-session-maintainer", /* tryVirtual= */ false));
 
   final class MultiplexedSessionMaintainer {
     private final Clock clock;
@@ -620,17 +694,14 @@ final class MultiplexedSessionDatabaseClient extends AbstractMultiplexedSessionD
 
     private synchronized void start() {
       // Schedule the maintainer to run once every ten minutes (by default).
-      long loopFrequencyMillis =
-          MultiplexedSessionDatabaseClient.this
-              .sessionClient
-              .getSpanner()
-              .getOptions()
-              .getSessionPoolOptions()
-              .getMultiplexedSessionMaintenanceLoopFrequency()
-              .toMillis();
-      this.scheduledFuture =
-          MAINTAINER_SERVICE.scheduleAtFixedRate(
-              this::maintain, loopFrequencyMillis, loopFrequencyMillis, TimeUnit.MILLISECONDS);
+      long loopFrequencyMillis = MultiplexedSessionDatabaseClient.this.sessionClient
+          .getSpanner()
+          .getOptions()
+          .getSessionPoolOptions()
+          .getMultiplexedSessionMaintenanceLoopFrequency()
+          .toMillis();
+      this.scheduledFuture = MAINTAINER_SERVICE.scheduleAtFixedRate(
+          this::maintain, loopFrequencyMillis, loopFrequencyMillis, TimeUnit.MILLISECONDS);
     }
 
     private synchronized void stop() {
@@ -645,8 +716,15 @@ final class MultiplexedSessionDatabaseClient extends AbstractMultiplexedSessionD
             new SessionConsumer() {
               @Override
               public void onSessionReady(SessionImpl session) {
+                SessionReference sessionRef = session.getSessionReference();
+                try {
+                  if (metadataSupplier.isInitialized()) {
+                    sessionRef.setDatabaseMetadata(metadataSupplier.get());
+                  }
+                } catch (Exception ignore) {
+                }
                 multiplexedSessionReference.set(
-                    ApiFutures.immediateFuture(session.getSessionReference()));
+                    ApiFutures.immediateFuture(sessionRef));
                 expirationDate.set(
                     clock
                         .instant()
@@ -655,9 +733,12 @@ final class MultiplexedSessionDatabaseClient extends AbstractMultiplexedSessionD
 
               @Override
               public void onSessionCreateFailure(Throwable t, int createFailureForSessionCount) {
-                // ignore any errors during re-creation of the multiplexed session. This means that
-                // we continue to use the session that has passed its expiration date for now, and
-                // that a new attempt at creating a new session will be done in 10 minutes from now.
+                // ignore any errors during re-creation of the multiplexed session. This means
+                // that
+                // we continue to use the session that has passed its expiration date for now,
+                // and
+                // that a new attempt at creating a new session will be done in 10 minutes from
+                // now.
               }
             });
       }
