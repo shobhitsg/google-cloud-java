@@ -267,6 +267,18 @@ public class MockSpannerServiceImpl extends SpannerImplBase implements MockGrpcS
 
   /** The result of a statement that is executed on a {@link MockSpannerServiceImpl}. */
   public static class StatementResult {
+
+    private static final Statement DETERMINE_DIALECT_STATEMENT = Statement.newBuilder(
+            "SELECT 'PostgreSQL' AS dialect "
+                + "FROM INFORMATION_SCHEMA.SCHEMATA "
+                + "WHERE SCHEMA_NAME='information_schema' "
+                + "UNION ALL "
+                + "SELECT 'GoogleStandardSQL' AS dialect "
+                + "FROM INFORMATION_SCHEMA.SCHEMATA "
+                + "WHERE SCHEMA_NAME='INFORMATION_SCHEMA' "
+                + "AND Catalog_Name IS NULL")
+        .build();
+
     private enum StatementResultType {
       RESULT_SET,
       UPDATE_COUNT,
@@ -320,7 +332,7 @@ public class MockSpannerServiceImpl extends SpannerImplBase implements MockGrpcS
     /** Creates a result for the query that detects the dialect that is used for the database. */
     public static StatementResult detectDialectResult(Dialect resultDialect) {
       return StatementResult.query(
-          MultiplexedSessionDatabaseClient.DETERMINE_DIALECT_STATEMENT,
+          DETERMINE_DIALECT_STATEMENT,
           ResultSet.newBuilder()
               .setMetadata(
                   ResultSetMetadata.newBuilder()
@@ -338,6 +350,74 @@ public class MockSpannerServiceImpl extends SpannerImplBase implements MockGrpcS
                       .addValues(
                           com.google.protobuf.Value.newBuilder()
                               .setStringValue(resultDialect.toString())
+                              .build())
+                      .build())
+              .build());
+    }
+
+    /**
+     * Creates a result for the query that detects the database metadata.
+     */
+    public static StatementResult detectMetadataResult(Dialect resultDialect) {
+      return detectMetadataResult(resultDialect, "serializable", "pessimistic");
+    }
+
+    /**
+     * Creates a result for the query that detects the database metadata with custom isolation and
+     * lock mode.
+     */
+    public static StatementResult detectMetadataResult(
+        Dialect resultDialect, String defaultTxnIsolation, String defaultReadLockMode) {
+      return StatementResult.query(
+          MultiplexedSessionDatabaseClient.DETERMINE_METADATA_STATEMENT,
+          ResultSet.newBuilder()
+              .setMetadata(
+                  ResultSetMetadata.newBuilder()
+                      .setRowType(
+                          StructType.newBuilder()
+                              .addFields(
+                                  Field.newBuilder()
+                                      .setName("option_name")
+                                      .setType(Type.newBuilder().setCode(TypeCode.STRING).build())
+                                      .build())
+                              .addFields(
+                                  Field.newBuilder()
+                                      .setName("option_value")
+                                      .setType(Type.newBuilder().setCode(TypeCode.STRING).build())
+                                      .build())
+                              .build())
+                      .build())
+              .addRows(
+                  ListValue.newBuilder()
+                      .addValues(
+                          com.google.protobuf.Value.newBuilder()
+                              .setStringValue("database_dialect")
+                              .build())
+                      .addValues(
+                          com.google.protobuf.Value.newBuilder()
+                              .setStringValue(resultDialect.toString())
+                              .build())
+                      .build())
+              .addRows(
+                  ListValue.newBuilder()
+                      .addValues(
+                          com.google.protobuf.Value.newBuilder()
+                              .setStringValue("default_transaction_isolation")
+                              .build())
+                      .addValues(
+                          com.google.protobuf.Value.newBuilder()
+                              .setStringValue(defaultTxnIsolation)
+                              .build())
+                      .build())
+              .addRows(
+                  ListValue.newBuilder()
+                      .addValues(
+                          com.google.protobuf.Value.newBuilder()
+                              .setStringValue("default_read_lock_mode")
+                              .build())
+                      .addValues(
+                          com.google.protobuf.Value.newBuilder()
+                              .setStringValue(defaultReadLockMode)
                               .build())
                       .build())
               .build());
@@ -598,7 +678,7 @@ public class MockSpannerServiceImpl extends SpannerImplBase implements MockGrpcS
 
   /**
    * Flip this switch to true if you want the {@link
-   * MultiplexedSessionDatabaseClient#DETERMINE_DIALECT_STATEMENT} statement to be included in the
+   * MultiplexedSessionDatabaseClient#DETERMINE_METADATA_STATEMENT} statement to be included in the
    * recorded requests on the mock server. It is ignored by default to prevent tests that do not
    * expect this request to suddenly start failing.
    */
@@ -765,7 +845,7 @@ public class MockSpannerServiceImpl extends SpannerImplBase implements MockGrpcS
 
   /**
    * Set this to true if you want the {@link
-   * MultiplexedSessionDatabaseClient#DETERMINE_DIALECT_STATEMENT} statement to be included in the
+   * MultiplexedSessionDatabaseClient#DETERMINE_METADATA_STATEMENT} statement to be included in the
    * recorded requests on the mock server. It is ignored by default to prevent tests that do not
    * expect this request to suddenly start failing.
    */
@@ -1056,7 +1136,12 @@ public class MockSpannerServiceImpl extends SpannerImplBase implements MockGrpcS
 
   @Override
   public void executeSql(ExecuteSqlRequest request, StreamObserver<ResultSet> responseObserver) {
-    maybeFreezeAndRecordRequest(request);
+    if (includeDetermineDialectStatementInRequests
+        || !request
+        .getSql()
+        .equals(MultiplexedSessionDatabaseClient.DETERMINE_METADATA_STATEMENT.getSql())) {
+      maybeFreezeAndRecordRequest(request);
+    }
     Preconditions.checkNotNull(request.getSession());
     Session session = getSession(request.getSession());
     if (session == null) {
@@ -1260,8 +1345,8 @@ public class MockSpannerServiceImpl extends SpannerImplBase implements MockGrpcS
       ExecuteSqlRequest request, StreamObserver<PartialResultSet> responseObserver) {
     if (includeDetermineDialectStatementInRequests
         || !request
-            .getSql()
-            .equals(MultiplexedSessionDatabaseClient.DETERMINE_DIALECT_STATEMENT.getSql())) {
+        .getSql()
+        .equals(MultiplexedSessionDatabaseClient.DETERMINE_METADATA_STATEMENT.getSql())) {
       maybeFreezeAndRecordRequest(request);
     }
     Preconditions.checkNotNull(request.getSession());

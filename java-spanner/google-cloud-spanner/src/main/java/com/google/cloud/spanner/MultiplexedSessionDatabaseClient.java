@@ -31,6 +31,8 @@ import com.google.cloud.spanner.SpannerException.ResourceNotFoundException;
 import com.google.common.annotations.VisibleForTesting;
 import com.google.common.base.Preconditions;
 import com.google.spanner.v1.BatchWriteResponse;
+import com.google.spanner.v1.TransactionOptions.IsolationLevel;
+import com.google.spanner.v1.TransactionOptions.ReadWrite.ReadLockMode;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -64,11 +66,12 @@ final class MultiplexedSessionDatabaseClient extends AbstractMultiplexedSessionD
   private static final int MAX_INITIAL_CREATE_SESSION_ATTEMPTS = 10;
 
   @VisibleForTesting
-  static final Statement DETERMINE_DIALECT_STATEMENT =
+  static final Statement DETERMINE_METADATA_STATEMENT =
       Statement.newBuilder(
-              "select option_value "
-                  + "from information_schema.database_options "
-                  + "where option_name='database_dialect'")
+              "SELECT OPTION_NAME, OPTION_VALUE "
+                  + "FROM INFORMATION_SCHEMA.DATABASE_OPTIONS "
+                  + "WHERE OPTION_NAME IN ('default_transaction_isolation', "
+                  + "'default_read_lock_mode', 'database_dialect')")
           .build();
 
   /**
@@ -279,7 +282,7 @@ final class MultiplexedSessionDatabaseClient extends AbstractMultiplexedSessionD
                 .getOptions()
                 .getSessionPoolOptions()
                 .isAutoDetectDialect()) {
-              MAINTAINER_SERVICE.submit(() -> getDialect());
+              MAINTAINER_SERVICE.submit(() -> getDatabaseMetadata());
             }
           }
 
@@ -473,32 +476,66 @@ final class MultiplexedSessionDatabaseClient extends AbstractMultiplexedSessionD
     }
   }
 
-  private final AbstractLazyInitializer<Dialect> dialectSupplier =
-      new AbstractLazyInitializer<Dialect>() {
+  private final AbstractLazyInitializer<DatabaseMetadata> metadataSupplier =
+      new AbstractLazyInitializer<DatabaseMetadata>() {
         @Override
-        protected Dialect initialize() {
-          try (ResultSet dialectResultSet = singleUse().executeQuery(DETERMINE_DIALECT_STATEMENT)) {
-            if (dialectResultSet.next()) {
-              return Dialect.fromName(dialectResultSet.getString(0));
+        protected DatabaseMetadata initialize() {
+          Dialect dialect = Dialect.GOOGLE_STANDARD_SQL;
+          IsolationLevel isolationLevel = IsolationLevel.SERIALIZABLE;
+          ReadLockMode readLockMode = ReadLockMode.PESSIMISTIC;
+
+          try (ResultSet resultSet = singleUse().executeQuery(DETERMINE_METADATA_STATEMENT)) {
+            while (resultSet.next()) {
+              String name = resultSet.getString(0);
+              String value = resultSet.getString(1);
+              if ("database_dialect".equalsIgnoreCase(name)) {
+                dialect = Dialect.fromName(value);
+              } else if ("default_transaction_isolation".equalsIgnoreCase(name)) {
+                if ("repeatable read".equalsIgnoreCase(value)) {
+                  isolationLevel = IsolationLevel.REPEATABLE_READ;
+                } else if ("serializable".equalsIgnoreCase(value)) {
+                  isolationLevel = IsolationLevel.SERIALIZABLE;
+                }
+              } else if ("default_read_lock_mode".equalsIgnoreCase(name)) {
+                if ("optimistic".equalsIgnoreCase(value)) {
+                  readLockMode = ReadLockMode.OPTIMISTIC;
+                } else if ("pessimistic".equalsIgnoreCase(value)) {
+                  readLockMode = ReadLockMode.PESSIMISTIC;
+                }
+              }
             }
+          } catch (Exception exception) {
+            // This should not really happen, keep defaults on failure
           }
-          // This should not really happen, but it is the safest fallback value.
-          return Dialect.GOOGLE_STANDARD_SQL;
+          DatabaseMetadata metadata = new DatabaseMetadata(dialect, isolationLevel, readLockMode);
+          try {
+            Future<SessionReference> sessionRefFuture = multiplexedSessionReference.get();
+            if (sessionRefFuture != null && sessionRefFuture.isDone()) {
+              sessionRefFuture.get().setDatabaseMetadata(metadata);
+            }
+          } catch (Exception exception) {
+            throw SpannerExceptionFactory.asSpannerException(exception);
+          }
+          return metadata;
         }
       };
 
-  @Override
-  public Dialect getDialect() {
+  DatabaseMetadata getDatabaseMetadata() {
     try {
-      return dialectSupplier.get();
+      return metadataSupplier.get();
     } catch (Exception exception) {
       throw SpannerExceptionFactory.asSpannerException(exception);
     }
   }
 
+  @Override
+  public Dialect getDialect() {
+    return getDatabaseMetadata().getDialect();
+  }
+
   Future<Dialect> getDialectAsync() {
     try {
-      return MAINTAINER_SERVICE.submit(dialectSupplier::get);
+      return MAINTAINER_SERVICE.submit(() -> getDatabaseMetadata().getDialect());
     } catch (Exception exception) {
       throw SpannerExceptionFactory.asSpannerException(exception);
     }
@@ -659,8 +696,16 @@ final class MultiplexedSessionDatabaseClient extends AbstractMultiplexedSessionD
             new SessionConsumer() {
               @Override
               public void onSessionReady(SessionImpl session) {
+                SessionReference sessionRef = session.getSessionReference();
+                try {
+                  if (metadataSupplier.isInitialized()) {
+                    sessionRef.setDatabaseMetadata(getDatabaseMetadata());
+                  }
+                } catch (Exception exception) {
+                  throw SpannerExceptionFactory.asSpannerException(exception);
+                }
                 multiplexedSessionReference.set(
-                    ApiFutures.immediateFuture(session.getSessionReference()));
+                    ApiFutures.immediateFuture(sessionRef));
                 expirationDate.set(
                     clock
                         .instant()

@@ -210,6 +210,8 @@ public class TransactionMockServerTest extends AbstractMockServerTest {
     for (Dialect dialect : new Dialect[] {Dialect.POSTGRESQL, Dialect.GOOGLE_STANDARD_SQL}) {
       mockSpanner.putStatementResult(
           MockSpannerServiceImpl.StatementResult.detectDialectResult(dialect));
+      mockSpanner.putStatementResult(
+          MockSpannerServiceImpl.StatementResult.detectMetadataResult(dialect));
 
       try (Connection connection = super.createConnection()) {
         for (IsolationLevel isolationLevel :
@@ -261,6 +263,8 @@ public class TransactionMockServerTest extends AbstractMockServerTest {
     SpannerPool.closeSpannerPool();
     mockSpanner.putStatementResult(
         MockSpannerServiceImpl.StatementResult.detectDialectResult(Dialect.POSTGRESQL));
+    mockSpanner.putStatementResult(
+        MockSpannerServiceImpl.StatementResult.detectMetadataResult(Dialect.POSTGRESQL));
 
     try (Connection connection = super.createConnection()) {
       for (boolean autocommit : new boolean[] {true, false}) {
