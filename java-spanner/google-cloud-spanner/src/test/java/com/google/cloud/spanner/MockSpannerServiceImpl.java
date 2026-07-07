@@ -893,6 +893,10 @@ public class MockSpannerServiceImpl extends SpannerImplBase implements MockGrpcS
     ignoreInlineBeginRequest.set(ignore);
   }
 
+  private boolean shouldOmitInlineBeginTransaction(TransactionSelector transactionSelector) {
+    return ignoreInlineBeginRequest.get() && transactionSelector.hasBegin();
+  }
+
   public void freeze() {
     synchronized (lock) {
       freezeLock = new CountDownLatch(1);
@@ -1185,12 +1189,12 @@ public class MockSpannerServiceImpl extends SpannerImplBase implements MockGrpcS
                             .setRowCountExact(result.getUpdateCount())
                             .build())
                     .setMetadata(
-                        ResultSetMetadata.newBuilder()
-                            .setTransaction(
-                                ignoreInlineBeginRequest.get()
-                                    ? Transaction.getDefaultInstance()
-                                    : Transaction.newBuilder().setId(transactionId).build())
-                            .build());
+                        shouldOmitInlineBeginTransaction(request.getTransaction())
+                            ? ResultSetMetadata.getDefaultInstance()
+                            : ResultSetMetadata.newBuilder()
+                                .setTransaction(
+                                    Transaction.newBuilder().setId(transactionId).build())
+                                .build());
             if (session.getMultiplexed() && isReadWriteTransaction(transactionId)) {
               resultSetBuilder.setPrecommitToken(getResultSetPrecommitToken(transactionId));
             }
@@ -1216,13 +1220,12 @@ public class MockSpannerServiceImpl extends SpannerImplBase implements MockGrpcS
       Session session) {
     ResultSetMetadata metadata = resultSet.getMetadata();
     if (transactionId != null) {
-      metadata =
-          metadata.toBuilder()
-              .setTransaction(
-                  ignoreInlineBeginRequest.get()
-                      ? Transaction.getDefaultInstance()
-                      : Transaction.newBuilder().setId(transactionId).build())
-              .build();
+      if (!shouldOmitInlineBeginTransaction(transactionSelector)) {
+        metadata =
+            metadata.toBuilder()
+                .setTransaction(Transaction.newBuilder().setId(transactionId).build())
+                .build();
+      }
     } else if (transactionSelector.hasBegin() || transactionSelector.hasSingleUse()) {
       Transaction transaction = getTemporaryTransactionOrNull(transactionSelector);
       metadata = metadata.toBuilder().setTransaction(transaction).build();
@@ -1319,12 +1322,11 @@ public class MockSpannerServiceImpl extends SpannerImplBase implements MockGrpcS
             ResultSet.newBuilder()
                 .setStats(ResultSetStats.newBuilder().setRowCountExact(updateCount).build())
                 .setMetadata(
-                    ResultSetMetadata.newBuilder()
-                        .setTransaction(
-                            ignoreInlineBeginRequest.get()
-                                ? Transaction.getDefaultInstance()
-                                : Transaction.newBuilder().setId(transactionId).build())
-                        .build())
+                    shouldOmitInlineBeginTransaction(request.getTransaction())
+                        ? ResultSetMetadata.getDefaultInstance()
+                        : ResultSetMetadata.newBuilder()
+                            .setTransaction(Transaction.newBuilder().setId(transactionId).build())
+                            .build())
                 .build());
       }
       builder.setStatus(status);

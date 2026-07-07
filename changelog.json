@@ -5,6 +5,583 @@
       "changes": [
         {
           "type": "feat",
+          "sha": "672881620651491ef45b38d9fd14bb1a0b8bebcf",
+          "message": "onboard a new library",
+          "issues": [
+            "13509"
+          ],
+          "scope": "google/cloud/agentregistry/v1"
+        }
+      ],
+      "version": "1.88.0",
+      "language": "JAVA",
+      "artifactName": "com.google.cloud:google-cloud-agentregistry",
+      "id": "0e35c037-f91a-4083-9923-3e33193c0520",
+      "createTime": "2026-07-06T21:41:29.331Z"
+    },
+    {
+      "changes": [
+        {
+          "type": "fix",
+          "sha": "35eb04114702a207ef73c98e53241d0263ddb09a",
+          "message": "retry cancel job and routine creation on transient HTTP 5xx errors",
+          "issues": [
+            "13416"
+          ],
+          "scope": "bigquery"
+        },
+        {
+          "type": "fix",
+          "sha": "1a6f4d5acc5c1c79198d00927e4603431d440795",
+          "message": "Update fast query path to allow jobTimeoutMs in the request",
+          "issues": [
+            "13502"
+          ],
+          "scope": "bigquery"
+        },
+        {
+          "type": "fix",
+          "sha": "64cde7f23a2a0186664bc459e5e91d773ebb0b29",
+          "message": "route JOB_CREATION_REQUIRED through fast query path",
+          "issues": [
+            "13437"
+          ],
+          "scope": "bigquery"
+        },
+        {
+          "type": "feat",
+          "sha": "35804075564723e744a5fb30e291fcfc235bbcad",
+          "message": "add internal listProjects API to core client",
+          "issues": [
+            "13429"
+          ],
+          "scope": "bigquery"
+        },
+        {
+          "type": "fix",
+          "sha": "203a91e99c021c60918961f37a67ade77673fb29",
+          "message": "pass rowsInPage with TableResult",
+          "issues": [
+            "13238"
+          ],
+          "scope": "bqjdbc"
+        },
+        {
+          "type": "feat",
+          "sha": "110d2b79344eded7252d0985068e624464697a02",
+          "message": "enable self-signed JWTs by default in ServiceOptions",
+          "issues": [
+            "13338"
+          ]
+        }
+      ],
+      "version": "1.88.0",
+      "language": "JAVA",
+      "artifactName": "com.google.cloud:google-cloud-bigquery",
+      "id": "7991a185-64fb-4dd0-bf86-d645c03a50ba",
+      "createTime": "2026-07-06T21:41:29.182Z"
+    },
+    {
+      "changes": [
+        {
+          "type": "feat",
+          "sha": "50a8658841f5dbd6ef64627a60efda5809445412",
+          "message": "update compose sample to support deleteSourceObjects option",
+          "issues": [
+            "13493"
+          ],
+          "scope": "storage"
+        },
+        {
+          "type": "feat",
+          "sha": "9492aa2b01382d731abf465aa69444092068a814",
+          "message": "log additional bytes received from GCS in read path",
+          "issues": [
+            "13427"
+          ],
+          "scope": "storage"
+        },
+        {
+          "type": "feat",
+          "sha": "591cae0298b7bc5e679fd7b67ac6fe7b8c0c480e",
+          "message": "adding disabling option for bidi reads",
+          "issues": [
+            "13506"
+          ],
+          "scope": "storage"
+        },
+        {
+          "type": "feat",
+          "sha": "872d7b7d83fe91abff7940f9c375752dcf83892f",
+          "message": "add checksum validation in the json read channel",
+          "issues": [
+            "13270"
+          ],
+          "scope": "storage"
+        },
+        {
+          "type": "feat",
+          "sha": "396b042298bdfb32abf48b15fe6f70577fb9d4b7",
+          "message": "add checksum validation on json read paths",
+          "issues": [
+            "13269"
+          ],
+          "scope": "storage"
+        },
+        {
+          "type": "feat",
+          "sha": "9113d80318a0fcd3c8c615b1051b689a14c83025",
+          "message": "add full object checksum validation for bidi flow",
+          "issues": [
+            "13266"
+          ],
+          "scope": "storage"
+        },
+        {
+          "type": "feat",
+          "sha": "a5ba6067abb00855466f31a53d037d8e61f45da0",
+          "message": "add full object checksum validation for grpc flow",
+          "issues": [
+            "13265"
+          ],
+          "scope": "storage"
+        },
+        {
+          "type": "feat",
+          "sha": "bd4032476d9ef97e3b513043b53bd446511c5e95",
+          "message": "Adding CumulativeHasher wrapper class for Full object …",
+          "issues": [
+            "13239"
+          ],
+          "scope": "storage"
+        },
+        {
+          "type": "feat",
+          "sha": "110d2b79344eded7252d0985068e624464697a02",
+          "message": "enable self-signed JWTs by default in ServiceOptions",
+          "issues": [
+            "13338"
+          ]
+        }
+      ],
+      "version": "1.88.0",
+      "language": "JAVA",
+      "artifactName": "com.google.cloud:google-cloud-storage",
+      "id": "64c5816d-343a-49f4-a60f-1a90966fa917",
+      "createTime": "2026-07-06T21:41:29.031Z"
+    },
+    {
+      "changes": [
+        {
+          "type": "deps",
+          "sha": "6abef19ff0f095a6a3156e1d50ae7162f9d53315",
+          "message": "Upgrade google-http-client to v2.1.1",
+          "issues": [
+            "13578"
+          ]
+        },
+        {
+          "type": "feat",
+          "sha": "eb379b367581356de1d621bf17df5761de71d318",
+          "message": "scale up connection worker pool based on latency",
+          "issues": [
+            "13384"
+          ]
+        }
+      ],
+      "version": "1.88.0",
+      "language": "JAVA",
+      "artifactName": "com.google.cloud:google-cloud-bigquerystorage",
+      "id": "64a1243a-5414-4874-bd0a-0bf7d222d446",
+      "createTime": "2026-07-06T21:41:28.871Z"
+    },
+    {
+      "changes": [
+        {
+          "type": "deps",
+          "sha": "6abef19ff0f095a6a3156e1d50ae7162f9d53315",
+          "message": "Upgrade google-http-client to v2.1.1",
+          "issues": [
+            "13578"
+          ]
+        }
+      ],
+      "version": "1.88.0",
+      "language": "JAVA",
+      "artifactName": "com.google.cloud:grpc-gcp",
+      "id": "b044e434-012d-4411-8b3b-941569543fab",
+      "createTime": "2026-07-06T21:41:28.724Z"
+    },
+    {
+      "changes": [
+        {
+          "type": "deps",
+          "sha": "09faaacd5ab3c43ea72d453d4809d9418e450bf2",
+          "message": "Update gapic-showcase to v0.41.0",
+          "issues": [
+            "13582"
+          ]
+        },
+        {
+          "type": "feat",
+          "sha": "825dadd008632b633d18c5035f9d448a12d6a49f",
+          "message": "Add NullMarked annotation to generated classes",
+          "issues": [
+            "13517"
+          ],
+          "scope": "gapic-generator"
+        }
+      ],
+      "version": "1.88.0",
+      "language": "JAVA",
+      "artifactName": "com.google.cloud:gapic-showcase",
+      "id": "d0213a08-71b3-4d7c-9766-041f3ab9070f",
+      "createTime": "2026-07-06T21:41:28.578Z"
+    },
+    {
+      "changes": [
+        {
+          "type": "deps",
+          "sha": "fd899574b69cfce2a36a734554d2c4290db3f4ca",
+          "message": "Update commons-codec to v1.18.0",
+          "issues": [
+            "13598"
+          ],
+          "scope": "auth"
+        },
+        {
+          "type": "deps",
+          "sha": "6abef19ff0f095a6a3156e1d50ae7162f9d53315",
+          "message": "Upgrade google-http-client to v2.1.1",
+          "issues": [
+            "13578"
+          ]
+        },
+        {
+          "type": "feat",
+          "sha": "b721e435849e3e4a0d0cecd8d09e18bd989f4205",
+          "message": "Add support for Regional Access Boundaries",
+          "issues": [
+            "13499"
+          ],
+          "scope": "auth"
+        },
+        {
+          "type": "fix",
+          "sha": "77e84a9f02a96974606924ad21e00c14a313cf5f",
+          "message": "handle missing APPDATA on Windows gracefully",
+          "issues": [
+            "13471",
+            "12565"
+          ],
+          "scope": "auth"
+        },
+        {
+          "type": "fix",
+          "sha": "2d9d01cdff846f8594927c9556bcc51cb8225817",
+          "message": "Fix UserCredentials serialization clientSecret leak",
+          "issues": [
+            "13465"
+          ],
+          "scope": "auth"
+        }
+      ],
+      "version": "1.88.0",
+      "language": "JAVA",
+      "artifactName": "com.google.auth:google-auth-library",
+      "id": "236d39a7-2969-47e7-8ba7-e21b5d488d27",
+      "createTime": "2026-07-06T21:41:28.435Z"
+    },
+    {
+      "changes": [
+        {
+          "type": "fix",
+          "sha": "b56f9b854f9ba110606b2f123b989d6ca758c6a2",
+          "message": "honour session_load override when server-returned session_load is 0",
+          "issues": [
+            "13629"
+          ],
+          "scope": "bigtable"
+        },
+        {
+          "type": "fix",
+          "sha": "e8c428d17087b14938a57bce1096b96a9b489f5a",
+          "message": "fallback on VPC",
+          "issues": [
+            "13567"
+          ]
+        },
+        {
+          "type": "feat",
+          "sha": "2c7e5f530ebb5628a8c04d49be9019a0a66dfdca",
+          "message": "route point read rows to shim",
+          "issues": [
+            "13542"
+          ],
+          "scope": "bigtable"
+        }
+      ],
+      "version": "1.88.0",
+      "language": "JAVA",
+      "artifactName": "com.google.cloud:google-cloud-bigtable",
+      "id": "1ff31888-c563-427a-9f60-b02d014c3fc5",
+      "createTime": "2026-07-06T21:41:28.283Z"
+    },
+    {
+      "changes": [
+        {
+          "type": "fix",
+          "sha": "37b77c3fbd509747ec10bd72e3227e4e7b2b22dc",
+          "message": "update dynamic channel pool default configuration",
+          "issues": [
+            "13646"
+          ],
+          "scope": "spanner"
+        },
+        {
+          "type": "feat",
+          "sha": "9d783074a6d33fd8821cad4d130ad75e32501dde",
+          "message": "add settings for gRCP keep-alive",
+          "issues": [
+            "13643"
+          ],
+          "scope": "spanner"
+        },
+        {
+          "type": "fix",
+          "sha": "863c26e5dd90186899ae92c24024012d3d4492f6",
+          "message": "remove explicit tink version to resolve dependency convergence conflict",
+          "issues": [
+            "13602"
+          ],
+          "scope": "spanner"
+        },
+        {
+          "type": "feat",
+          "sha": "55930b44ed3a4e9779a5f6fb0553b6642605d84a",
+          "message": "auth login support for Spanner Omni endpoints",
+          "issues": [
+            "13470"
+          ],
+          "scope": "spanner"
+        },
+        {
+          "type": "fix",
+          "sha": "6908deefbcb4f1e77b9a73b09a6ea96261a45846",
+          "message": "pin inline read-write transactions to default endpoint",
+          "issues": [
+            "13562"
+          ],
+          "scope": "spanner"
+        },
+        {
+          "type": "fix",
+          "sha": "94315ce3d80eab06295cceabedb70077e65778da",
+          "message": "fail fast when inline-begin DML returns no transaction id",
+          "issues": [
+            "13536"
+          ],
+          "scope": "spanner"
+        },
+        {
+          "type": "feat",
+          "sha": "29543a23d7f80d908fc019fa39f612d5eba83b10",
+          "message": "use self-signed JWTs in Spanner MutableCredentials",
+          "issues": [
+            "13381"
+          ]
+        }
+      ],
+      "version": "1.88.0",
+      "language": "JAVA",
+      "artifactName": "com.google.cloud:google-cloud-spanner",
+      "id": "fd0376df-58df-46f4-9f9b-9827ff7b5c4d",
+      "createTime": "2026-07-06T21:41:28.131Z"
+    },
+    {
+      "changes": [
+        {
+          "type": "fix",
+          "sha": "f7eb23d3122b1112c7cfbd940b8af5602afe9666",
+          "message": "correct `FilterTablesOnDefaultDataset` fallback logic",
+          "issues": [
+            "13625"
+          ],
+          "scope": "bigquery-jdbc"
+        },
+        {
+          "type": "fix",
+          "sha": "8707a659b17a5cdb854677c1193f5a8c4fcad7b0",
+          "message": "update Maven Central artifact link in the README",
+          "issues": [
+            "13563"
+          ],
+          "scope": "bigquery-jdbc"
+        },
+        {
+          "type": "fix",
+          "sha": "a6bb362a704dfb3293fcbb4c631bb515897d1552",
+          "message": "ensure test uses unique dataset & cleans up",
+          "issues": [
+            "13587"
+          ],
+          "scope": "bigquery-jdbc"
+        },
+        {
+          "type": "fix",
+          "sha": "4bb3a615fd45fb0ad487e1f6ef2a8418d391002b",
+          "message": "update format validation tests to create tables for the test",
+          "issues": [
+            "13588"
+          ],
+          "scope": "bigquery-jdbc"
+        },
+        {
+          "type": "fix",
+          "sha": "9fd84fcbdcf8bedd5c5002e8d6a43abc45387dce",
+          "message": "add proper version to BigQueryDriver",
+          "issues": [
+            "13294"
+          ],
+          "scope": "bigquery-jdbc"
+        },
+        {
+          "type": "fix",
+          "sha": "7ef1312df5607f402547b0bb582e2e8c6fcebef8",
+          "message": "shade org.slf4j",
+          "issues": [
+            "13547"
+          ],
+          "scope": "bigquery-jdbc"
+        },
+        {
+          "type": "fix",
+          "sha": "79bbee10f478b63ee918e581467300e1923dde74",
+          "message": "avoid rollback on statement close in manual commit mode",
+          "issues": [
+            "13503"
+          ],
+          "scope": "bigquery-jdbc"
+        },
+        {
+          "type": "feat",
+          "sha": "ab9669a1d41d1b24b997a7a5cfc15d580c8cca0a",
+          "message": "add `EnableProjectDiscovery` connection property for metadata methods",
+          "issues": [
+            "13344"
+          ],
+          "scope": "bigquery-jdbc"
+        },
+        {
+          "type": "fix",
+          "sha": "87dda5dfd8e913262c7ada0d078040cf6597c645",
+          "message": "propagate connection proxy settings to auth library",
+          "issues": [
+            "13539"
+          ],
+          "scope": "bigquery-jdbc"
+        },
+        {
+          "type": "feat",
+          "sha": "7af3224e40775de26c0408e9fcd28f598849159a",
+          "message": "respect standard JVM trustStore properties by default",
+          "issues": [
+            "13435"
+          ],
+          "scope": "bigquery-jdbc"
+        },
+        {
+          "type": "fix",
+          "sha": "d3e7a198f2a37024c699d6d26addde3d909a9922",
+          "message": "ensure largeResults are handled in PreparedStatement",
+          "issues": [
+            "13496"
+          ],
+          "scope": "bigquery-jdbc"
+        },
+        {
+          "type": "fix",
+          "sha": "40cd0a7c7700baec2d6f50d580e4566ab82236b3",
+          "message": "explicitly set location when available for temporary dataset",
+          "issues": [
+            "13508"
+          ],
+          "scope": "bigquery-jdbc"
+        },
+        {
+          "type": "feat",
+          "sha": "341e51ad213290e54f004d84da42ae9f1d7844c7",
+          "message": "migrate statement execution thread tracking to connection-scoped executor",
+          "issues": [
+            "13454"
+          ],
+          "scope": "bigquery-jdbc"
+        },
+        {
+          "type": "fix",
+          "sha": "203a91e99c021c60918961f37a67ade77673fb29",
+          "message": "pass rowsInPage with TableResult",
+          "issues": [
+            "13238"
+          ],
+          "scope": "bqjdbc"
+        },
+        {
+          "type": "feat",
+          "sha": "79e26b8c2c70eabdebe1f7c08208d34a388ee89d",
+          "message": "support connection-scoped executor isolation and dynamic queue warnings",
+          "issues": [
+            "13413"
+          ],
+          "scope": "bigquery-jdbc"
+        }
+      ],
+      "version": "1.88.0",
+      "language": "JAVA",
+      "artifactName": "com.google.cloud:google-cloud-bigquery-jdbc",
+      "id": "3b934674-24a7-4edb-98f0-383cc0c7109e",
+      "createTime": "2026-07-06T21:41:27.990Z"
+    },
+    {
+      "changes": [
+        {
+          "type": "fix",
+          "sha": "8afc0abd26061afc41184e49ad4b79461b091276",
+          "message": "reduce flakiness of E2E tracing tests",
+          "issues": [
+            "13645"
+          ],
+          "scope": "datastore"
+        },
+        {
+          "type": "fix",
+          "sha": "d281a620642e4867d8b6503f9f482fadd9931aa0",
+          "message": "Configure TraceExporter with Datastore credentials in E2E tests",
+          "issues": [
+            "13627"
+          ],
+          "scope": "datastore"
+        },
+        {
+          "type": "fix",
+          "sha": "53b7142d7b04c8a85ea67feab6a3d8320d1a507d",
+          "message": "disable built-in OpenTelemetry SDK when metrics export is disabled",
+          "issues": [
+            "13543"
+          ],
+          "scope": "datastore"
+        }
+      ],
+      "version": "1.88.0",
+      "language": "JAVA",
+      "artifactName": "com.google.cloud:google-cloud-datastore",
+      "id": "f678e625-3fd3-47ea-bb85-4baaf8c0da53",
+      "createTime": "2026-07-06T21:41:27.828Z"
+    },
+    {
+      "changes": [
+        {
+          "type": "feat",
           "sha": "39e93fe980d2fcb936b89c499b1ac2365a883734",
           "message": "[cloudsupport] v2 version for `GetComment` and `GetAttachment`",
           "issues": []
@@ -361046,5 +361623,5 @@
       "createTime": "2026-02-25T17:30:12.355Z"
     }
   ],
-  "updateTime": "2026-06-03T15:29:09.558Z"
+  "updateTime": "2026-07-06T21:41:29.331Z"
 }

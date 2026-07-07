@@ -17,6 +17,7 @@ package com.google.cloud.bigquery.jdbc;
 
 import static com.google.common.truth.Truth.assertThat;
 
+import com.google.cloud.bigquery.jdbc.utils.BigQueryJdbcVersionUtility;
 import java.sql.Connection;
 import java.sql.DriverPropertyInfo;
 import java.sql.SQLException;
@@ -78,12 +79,14 @@ public class BigQueryDriverTest extends BigQueryJdbcLoggingBaseTest {
 
   @Test
   public void testGetMajorVersionMatchesDriverMajorVersion() {
-    assertThat(bigQueryDriver.getMajorVersion()).isEqualTo(0);
+    assertThat(bigQueryDriver.getMajorVersion())
+        .isEqualTo(BigQueryJdbcVersionUtility.getDriverMajorVersion());
   }
 
   @Test
   public void testGetMinorVersionMatchesDriverMinorVersion() {
-    assertThat(bigQueryDriver.getMinorVersion()).isEqualTo(1);
+    assertThat(bigQueryDriver.getMinorVersion())
+        .isEqualTo(BigQueryJdbcVersionUtility.getDriverMinorVersion());
   }
 
   @Test
@@ -112,7 +115,7 @@ public class BigQueryDriverTest extends BigQueryJdbcLoggingBaseTest {
     Connection connection =
         bigQueryDriver.connect(
             "jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;"
-                + "OAuthType=2;OAuthAccessToken=redactedToken;ProjectId=t;LogLevel=3;LogPath=logs/;"
+                + "OAuthType=2;OAuthAccessToken=redactedToken;ProjectId=t;LogLevel=3;LogPath=target/;"
                 + "MyUnknownSetting=Value",
             new Properties());
     assertThat(connection.isClosed()).isFalse();
@@ -134,7 +137,7 @@ public class BigQueryDriverTest extends BigQueryJdbcLoggingBaseTest {
         () ->
             bigQueryDriver.connect(
                 "jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;"
-                    + "OAuthType=2;OAuthAccessToken=redactedToken;ProjectId=t;LogLevel=3;LogPath=logs/;"
+                    + "OAuthType=2;OAuthAccessToken=redactedToken;ProjectId=t;LogLevel=3;LogPath=target/;"
                     + "MalformedPropertyWithoutEquals",
                 new Properties()));
 
@@ -154,7 +157,7 @@ public class BigQueryDriverTest extends BigQueryJdbcLoggingBaseTest {
         () ->
             bigQueryDriver.connect(
                 "jdbc:bigquery://https://www.googleapis.com/bigquery/v2:443;"
-                    + "OAuthType=2;OAuthAccessToken=redactedToken;ProjectId=t;LogLevel=invalidInt;",
+                    + "OAuthType=2;OAuthAccessToken=redactedToken;ProjectId=t;LogLevel=invalidInt;LogPath=target/;",
                 new Properties()));
 
     boolean foundSevere =

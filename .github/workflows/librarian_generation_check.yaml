@@ -11,14 +11,34 @@
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
-name: Librarian generate diff check on pull requests
+
+# This workflow runs a check to ensure that all generated libraries are up-to-date with
+# the latest configuration.
+#
+# Triggers:
+# 1. Push to main: Generates the libraries, checks for git diffs, and fails (creating
+#    a Buganizer/GitHub issue) if any changes are detected.
+# 2. Manual trigger (workflow_dispatch) on a branch (except main): Generates the
+#    libraries and commits the resulting diff directly back to the triggering branch.
+name: Librarian - Generate libraries check / update
 on:
-  pull_request:
+  push:
+    branches:
+    - main
+  workflow_dispatch:
 
 jobs:
   library_generation:
     runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      issues: write
     steps:
+    - name: Prevent running manually on main branch
+      if: ${{ github.event_name == 'workflow_dispatch' && github.ref_name == 'main' }}
+      run: |
+        echo "Error: Running this workflow manually on the main branch is not allowed."
+        exit 1
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
@@ -57,12 +77,46 @@ jobs:
     - name: Run librarian install
       run: |
         librarian install
-        echo "$HOME/java_tools/bin" >> $GITHUB_PATH
+        echo "$HOME/.cache/librarian/bin/java_tools/bin" >> $GITHUB_PATH
     - name: Run librarian generate
       env:
         PYTHONPATH: ${{ github.workspace }}/sdk-platform-java/hermetic_build/library_generation/owlbot
       run: |
         librarian generate --all
     - name: Check for generated code changes
+      if: ${{ github.event_name != 'workflow_dispatch' }}
       run: |
-        git diff --exit-code
+        if [ -n "$(git status --porcelain)" ]; then
+          git status
+          echo "==================== GIT DIFF ===================="
+          git diff
+          echo "=================================================="
+          echo "Regeneration produced code changes! Please run 'librarian generate --all' to update the generated files."
+          exit 1
+        fi
+    - name: Commit and push changes (manual run only)
+      if: ${{ github.event_name == 'workflow_dispatch' }}
+      env:
+        GH_TOKEN: ${{ secrets.CLOUD_JAVA_BOT_GITHUB_TOKEN }}
+      run: |
+        if [ -n "$(git status --porcelain)" ]; then
+          [ -z "$(git config user.email)" ] && git config --global user.email "cloud-java-bot@google.com"
+          [ -z "$(git config user.name)" ] && git config --global user.name "cloud-java-bot"
+          git add -A
+          git commit -m "chore: regenerate libraries"
+          git remote set-url origin https://cloud-java-bot:${GH_TOKEN}@github.com/${{ github.repository }}.git
+          git push origin HEAD:${{ github.ref }}
+        else
+          echo "No changes to commit"
+        fi
+    - name: Create issue if previous step fails
+      if: ${{ failure() && github.event_name == 'push' && github.ref == 'refs/heads/main' }}
+      uses: googleapis/librarian/.github/actions/create-issue-on-failure@main
+      with:
+        title: "Librarian generate diff check failed on main branch"
+        body: |
+          The librarian generate diff check failed on main branch.
+
+          To keep the `main` branch healthy, please consider **reverting the triggering change** first. Once the revert is merged, you can investigate the failure and submit a new PR with the fix.
+
+          Please check the logs: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
