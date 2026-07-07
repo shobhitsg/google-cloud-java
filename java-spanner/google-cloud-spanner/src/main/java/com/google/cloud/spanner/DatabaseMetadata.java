@@ -20,7 +20,10 @@ import com.google.spanner.v1.TransactionOptions.IsolationLevel;
 import com.google.spanner.v1.TransactionOptions.ReadWrite.ReadLockMode;
 import java.util.Objects;
 
-/** Internal container for dynamic database-level defaults. */
+/**
+ * Internal container for dynamic database-level defaults queried from INFORMATION_SCHEMA.DATABASE_OPTIONS.
+ * Holds the database dialect, default transaction isolation level, and default read lock mode.
+ */
 final class DatabaseMetadata {
   private final Dialect dialect;
   private final IsolationLevel isolationLevel;

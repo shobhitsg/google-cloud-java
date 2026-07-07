@@ -339,8 +339,7 @@ public class MockSpannerServiceImpl extends SpannerImplBase implements MockGrpcS
      */
     public static StatementResult detectMetadataResult(
         Dialect resultDialect, String defaultTxnIsolation, String defaultReadLockMode) {
-      return StatementResult.query(
-          MultiplexedSessionDatabaseClient.DETERMINE_METADATA_STATEMENT,
+      ResultSet.Builder builder =
           ResultSet.newBuilder()
               .setMetadata(
                   ResultSetMetadata.newBuilder()
@@ -357,41 +356,48 @@ public class MockSpannerServiceImpl extends SpannerImplBase implements MockGrpcS
                                       .setType(Type.newBuilder().setCode(TypeCode.STRING).build())
                                       .build())
                               .build())
-                      .build())
-              .addRows(
-                  ListValue.newBuilder()
-                      .addValues(
-                          com.google.protobuf.Value.newBuilder()
-                              .setStringValue("database_dialect")
-                              .build())
-                      .addValues(
-                          com.google.protobuf.Value.newBuilder()
-                              .setStringValue(resultDialect.toString())
-                              .build())
-                      .build())
-              .addRows(
-                  ListValue.newBuilder()
-                      .addValues(
-                          com.google.protobuf.Value.newBuilder()
-                              .setStringValue("default_transaction_isolation")
-                              .build())
-                      .addValues(
-                          com.google.protobuf.Value.newBuilder()
-                              .setStringValue(defaultTxnIsolation)
-                              .build())
-                      .build())
-              .addRows(
-                  ListValue.newBuilder()
-                      .addValues(
-                          com.google.protobuf.Value.newBuilder()
-                              .setStringValue("default_read_lock_mode")
-                              .build())
-                      .addValues(
-                          com.google.protobuf.Value.newBuilder()
-                              .setStringValue(defaultReadLockMode)
-                              .build())
-                      .build())
-              .build());
+                      .build());
+      if (resultDialect != null) {
+        builder.addRows(
+            ListValue.newBuilder()
+                .addValues(
+                    com.google.protobuf.Value.newBuilder()
+                        .setStringValue("database_dialect")
+                        .build())
+                .addValues(
+                    com.google.protobuf.Value.newBuilder()
+                        .setStringValue(resultDialect.toString())
+                        .build())
+                .build());
+      }
+      if (defaultTxnIsolation != null) {
+        builder.addRows(
+            ListValue.newBuilder()
+                .addValues(
+                    com.google.protobuf.Value.newBuilder()
+                        .setStringValue("default_transaction_isolation")
+                        .build())
+                .addValues(
+                    com.google.protobuf.Value.newBuilder()
+                        .setStringValue(defaultTxnIsolation)
+                        .build())
+                .build());
+      }
+      if (defaultReadLockMode != null) {
+        builder.addRows(
+            ListValue.newBuilder()
+                .addValues(
+                    com.google.protobuf.Value.newBuilder()
+                        .setStringValue("default_read_lock_mode")
+                        .build())
+                .addValues(
+                    com.google.protobuf.Value.newBuilder()
+                        .setStringValue(defaultReadLockMode)
+                        .build())
+                .build());
+      }
+      return StatementResult.query(
+          MultiplexedSessionDatabaseClient.DETERMINE_METADATA_STATEMENT, builder.build());
     }
 
     private static class KeepLastElementDeque<E> extends LinkedList<E> {

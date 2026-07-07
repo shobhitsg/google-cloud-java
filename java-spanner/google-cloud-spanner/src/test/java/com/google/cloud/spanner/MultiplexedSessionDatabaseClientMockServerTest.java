@@ -2054,4 +2054,95 @@ public class MultiplexedSessionDatabaseClientMockServerTest extends AbstractMock
       Thread.yield();
     }
   }
+
+  @Test
+  public void testDatabaseMetadata_allFieldsReturned() throws Exception {
+    mockSpanner.putStatementResult(
+        StatementResult.detectMetadataResult(
+            Dialect.POSTGRESQL, "repeatable read", "optimistic"));
+    Spanner testSpanner =
+        SpannerOptions.newBuilder()
+            .setProjectId("test-project")
+            .setChannelProvider(channelProvider)
+            .setCredentials(NoCredentials.getInstance())
+            .setSessionPoolOption(SessionPoolOptions.newBuilder().setFailOnSessionLeak().build())
+            .build()
+            .getService();
+    DatabaseClientImpl client =
+        (DatabaseClientImpl) testSpanner.getDatabaseClient(DatabaseId.of("p", "i", "d"));
+
+    DatabaseMetadata metadata = client.multiplexedSessionDatabaseClient.getDatabaseMetadata();
+    assertEquals(Dialect.POSTGRESQL, metadata.getDialect());
+    assertEquals(
+        com.google.spanner.v1.TransactionOptions.IsolationLevel.REPEATABLE_READ,
+        metadata.getIsolationLevel());
+    assertEquals(
+        com.google.spanner.v1.TransactionOptions.ReadWrite.ReadLockMode.OPTIMISTIC,
+        metadata.getReadLockMode());
+
+    // Execute a query to ensure session is created and session reference has the metadata.
+    try (ResultSet resultSet = client.singleUse().executeQuery(STATEMENT)) {
+      while (resultSet.next()) {}
+    }
+    assertNotNull(client.multiplexedSessionDatabaseClient.getCurrentSessionReference());
+    assertEquals(
+        metadata,
+        client.multiplexedSessionDatabaseClient.getCurrentSessionReference().getDatabaseMetadata());
+  }
+
+  @Test
+  public void testDatabaseMetadata_missingFieldsFallbackToDefaults() throws Exception {
+    // Only return dialect, omit transaction isolation and read lock mode.
+    mockSpanner.putStatementResult(
+        StatementResult.detectMetadataResult(Dialect.GOOGLE_STANDARD_SQL, null, null));
+    Spanner testSpanner1 =
+        SpannerOptions.newBuilder()
+            .setProjectId("test-project")
+            .setChannelProvider(channelProvider)
+            .setCredentials(NoCredentials.getInstance())
+            .setSessionPoolOption(SessionPoolOptions.newBuilder().setFailOnSessionLeak().build())
+            .build()
+            .getService();
+    DatabaseClientImpl client1 =
+        (DatabaseClientImpl) testSpanner1.getDatabaseClient(DatabaseId.of("p", "i", "d1"));
+
+    DatabaseMetadata metadata1 = client1.multiplexedSessionDatabaseClient.getDatabaseMetadata();
+    assertEquals(Dialect.GOOGLE_STANDARD_SQL, metadata1.getDialect());
+    assertEquals(
+        com.google.spanner.v1.TransactionOptions.IsolationLevel.SERIALIZABLE,
+        metadata1.getIsolationLevel());
+    assertEquals(
+        com.google.spanner.v1.TransactionOptions.ReadWrite.ReadLockMode.PESSIMISTIC,
+        metadata1.getReadLockMode());
+
+    // Now test when all fields (including dialect) are omitted (empty result set).
+    mockSpanner.putStatementResult(StatementResult.detectMetadataResult(null, null, null));
+    Spanner testSpanner2 =
+        SpannerOptions.newBuilder()
+            .setProjectId("test-project")
+            .setChannelProvider(channelProvider)
+            .setCredentials(NoCredentials.getInstance())
+            .setSessionPoolOption(SessionPoolOptions.newBuilder().setFailOnSessionLeak().build())
+            .build()
+            .getService();
+    DatabaseClientImpl client2 =
+        (DatabaseClientImpl) testSpanner2.getDatabaseClient(DatabaseId.of("p", "i", "d2"));
+
+    DatabaseMetadata metadata2 = client2.multiplexedSessionDatabaseClient.getDatabaseMetadata();
+    assertEquals(Dialect.GOOGLE_STANDARD_SQL, metadata2.getDialect());
+    assertEquals(
+        com.google.spanner.v1.TransactionOptions.IsolationLevel.SERIALIZABLE,
+        metadata2.getIsolationLevel());
+    assertEquals(
+        com.google.spanner.v1.TransactionOptions.ReadWrite.ReadLockMode.PESSIMISTIC,
+        metadata2.getReadLockMode());
+
+    try (ResultSet resultSet = client2.singleUse().executeQuery(STATEMENT)) {
+      while (resultSet.next()) {}
+    }
+    assertNotNull(client2.multiplexedSessionDatabaseClient.getCurrentSessionReference());
+    assertEquals(
+        metadata2,
+        client2.multiplexedSessionDatabaseClient.getCurrentSessionReference().getDatabaseMetadata());
+  }
 }

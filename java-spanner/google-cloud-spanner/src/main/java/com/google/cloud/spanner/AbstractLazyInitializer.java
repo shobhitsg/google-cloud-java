@@ -53,6 +53,14 @@ public abstract class AbstractLazyInitializer<T> {
     return initialized;
   }
 
+  public void reset() {
+    synchronized (lock) {
+      initialized = false;
+      object = null;
+      error = null;
+    }
+  }
+
   /**
    * Initializes the actual object that should be returned. Is called once the first time an
    * instance of T is required.

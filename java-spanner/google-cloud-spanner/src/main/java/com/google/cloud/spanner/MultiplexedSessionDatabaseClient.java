@@ -50,12 +50,16 @@ import java.util.concurrent.TimeoutException;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.logging.Level;
+import java.util.logging.Logger;
 
 /**
  * {@link DatabaseClient} implementation that uses a single multiplexed session to execute
  * transactions.
  */
 final class MultiplexedSessionDatabaseClient extends AbstractMultiplexedSessionDatabaseClient {
+  private static final Logger logger = Logger.getLogger(MultiplexedSessionDatabaseClient.class.getName());
+
   /**
    * The maximum number of attempts that the client will try to execute CreateSession for the
    * initial multiplexed session. This value is only used for the very first multiplexed session
@@ -65,6 +69,13 @@ final class MultiplexedSessionDatabaseClient extends AbstractMultiplexedSessionD
    */
   private static final int MAX_INITIAL_CREATE_SESSION_ATTEMPTS = 10;
 
+  /**
+   * Statement used to query database-level default options from
+   * INFORMATION_SCHEMA.DATABASE_OPTIONS. This retrieves 'default_transaction_isolation',
+   * 'default_read_lock_mode', and 'database_dialect' so that the client can correctly configure
+   * transaction routing (e.g. Leader-Aware Routing) and isolation level behaviors without relying
+   * solely on client-side hardcoded defaults.
+   */
   @VisibleForTesting
   static final Statement DETERMINE_METADATA_STATEMENT =
       Statement.newBuilder(
@@ -476,49 +487,67 @@ final class MultiplexedSessionDatabaseClient extends AbstractMultiplexedSessionD
     }
   }
 
-  private final AbstractLazyInitializer<DatabaseMetadata> metadataSupplier =
-      new AbstractLazyInitializer<DatabaseMetadata>() {
-        @Override
-        protected DatabaseMetadata initialize() {
-          Dialect dialect = Dialect.GOOGLE_STANDARD_SQL;
-          IsolationLevel isolationLevel = IsolationLevel.SERIALIZABLE;
-          ReadLockMode readLockMode = ReadLockMode.PESSIMISTIC;
+  private static IsolationLevel parseIsolationLevel(String value) {
+    if ("repeatable read".equalsIgnoreCase(value)) {
+      return IsolationLevel.REPEATABLE_READ;
+    } else if ("serializable".equalsIgnoreCase(value)) {
+      return IsolationLevel.SERIALIZABLE;
+    }
+    return IsolationLevel.SERIALIZABLE;
+  }
 
-          try (ResultSet resultSet = singleUse().executeQuery(DETERMINE_METADATA_STATEMENT)) {
-            while (resultSet.next()) {
-              String name = resultSet.getString(0);
-              String value = resultSet.getString(1);
-              if ("database_dialect".equalsIgnoreCase(name)) {
-                dialect = Dialect.fromName(value);
-              } else if ("default_transaction_isolation".equalsIgnoreCase(name)) {
-                if ("repeatable read".equalsIgnoreCase(value)) {
-                  isolationLevel = IsolationLevel.REPEATABLE_READ;
-                } else if ("serializable".equalsIgnoreCase(value)) {
-                  isolationLevel = IsolationLevel.SERIALIZABLE;
-                }
-              } else if ("default_read_lock_mode".equalsIgnoreCase(name)) {
-                if ("optimistic".equalsIgnoreCase(value)) {
-                  readLockMode = ReadLockMode.OPTIMISTIC;
-                } else if ("pessimistic".equalsIgnoreCase(value)) {
-                  readLockMode = ReadLockMode.PESSIMISTIC;
-                }
-              }
-            }
-          } catch (Exception exception) {
-            // This should not really happen, keep defaults on failure
+  private static ReadLockMode parseReadLockMode(String value) {
+    if ("optimistic".equalsIgnoreCase(value)) {
+      return ReadLockMode.OPTIMISTIC;
+    } else if ("pessimistic".equalsIgnoreCase(value)) {
+      return ReadLockMode.PESSIMISTIC;
+    }
+    return ReadLockMode.PESSIMISTIC;
+  }
+
+  /**
+   * Lazily initializes and caches {@link DatabaseMetadata} (dialect, default isolation level, and
+   * read lock mode). Introspects the database options once and attaches the resolved metadata to
+   * the current multiplexed {@link SessionReference} so subsequent transactions can resolve their
+   * effective modes.
+   */
+  private final AbstractLazyInitializer<DatabaseMetadata> metadataSupplier = new AbstractLazyInitializer<DatabaseMetadata>() {
+    @Override
+    protected DatabaseMetadata initialize() {
+      Dialect dialect = Dialect.GOOGLE_STANDARD_SQL;
+      IsolationLevel isolationLevel = IsolationLevel.SERIALIZABLE;
+      ReadLockMode readLockMode = ReadLockMode.PESSIMISTIC;
+
+      try (ResultSet resultSet = singleUse().executeQuery(DETERMINE_METADATA_STATEMENT)) {
+        while (resultSet.next()) {
+          String name = resultSet.getString(0);
+          String value = resultSet.getString(1);
+          if ("database_dialect".equalsIgnoreCase(name)) {
+            dialect = Dialect.fromName(value);
+          } else if ("default_transaction_isolation".equalsIgnoreCase(name)) {
+            isolationLevel = parseIsolationLevel(value);
+          } else if ("default_read_lock_mode".equalsIgnoreCase(name)) {
+            readLockMode = parseReadLockMode(value);
           }
-          DatabaseMetadata metadata = new DatabaseMetadata(dialect, isolationLevel, readLockMode);
-          try {
-            Future<SessionReference> sessionRefFuture = multiplexedSessionReference.get();
-            if (sessionRefFuture != null && sessionRefFuture.isDone()) {
-              sessionRefFuture.get().setDatabaseMetadata(metadata);
-            }
-          } catch (Exception exception) {
-            throw SpannerExceptionFactory.asSpannerException(exception);
-          }
-          return metadata;
         }
-      };
+      } catch (Exception exception) {
+        logger.log(
+            Level.WARNING,
+            "Failed to detect database metadata, falling back to defaults",
+            exception);
+      }
+      DatabaseMetadata metadata = new DatabaseMetadata(dialect, isolationLevel, readLockMode);
+      try {
+        Future<SessionReference> sessionRefFuture = multiplexedSessionReference.get();
+        if (sessionRefFuture != null && sessionRefFuture.isDone()) {
+          sessionRefFuture.get().setDatabaseMetadata(metadata);
+        }
+      } catch (Exception exception) {
+        throw SpannerExceptionFactory.asSpannerException(exception);
+      }
+      return metadata;
+    }
+  };
 
   DatabaseMetadata getDatabaseMetadata() {
     try {
@@ -535,7 +564,7 @@ final class MultiplexedSessionDatabaseClient extends AbstractMultiplexedSessionD
 
   Future<Dialect> getDialectAsync() {
     try {
-      return MAINTAINER_SERVICE.submit(() -> getDatabaseMetadata().getDialect());
+      return MAINTAINER_SERVICE.submit(() -> getDialect());
     } catch (Exception exception) {
       throw SpannerExceptionFactory.asSpannerException(exception);
     }
@@ -697,15 +726,21 @@ final class MultiplexedSessionDatabaseClient extends AbstractMultiplexedSessionD
               @Override
               public void onSessionReady(SessionImpl session) {
                 SessionReference sessionRef = session.getSessionReference();
+                /**
+                 * Update the current session reference before querying metadata so that any
+                 * internal single-use query executed inside getDatabaseMetadata() runs against the
+                 * newly created session rather than the expiring one.
+                 */
+                multiplexedSessionReference.set(
+                    ApiFutures.immediateFuture(sessionRef));
                 try {
                   if (metadataSupplier.isInitialized()) {
+                    metadataSupplier.reset();
                     sessionRef.setDatabaseMetadata(getDatabaseMetadata());
                   }
                 } catch (Exception exception) {
                   throw SpannerExceptionFactory.asSpannerException(exception);
                 }
-                multiplexedSessionReference.set(
-                    ApiFutures.immediateFuture(sessionRef));
                 expirationDate.set(
                     clock
                         .instant()
