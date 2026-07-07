@@ -268,17 +268,6 @@ public class MockSpannerServiceImpl extends SpannerImplBase implements MockGrpcS
   /** The result of a statement that is executed on a {@link MockSpannerServiceImpl}. */
   public static class StatementResult {
 
-    private static final Statement DETERMINE_DIALECT_STATEMENT = Statement.newBuilder(
-            "SELECT 'PostgreSQL' AS dialect "
-                + "FROM INFORMATION_SCHEMA.SCHEMATA "
-                + "WHERE SCHEMA_NAME='information_schema' "
-                + "UNION ALL "
-                + "SELECT 'GoogleStandardSQL' AS dialect "
-                + "FROM INFORMATION_SCHEMA.SCHEMATA "
-                + "WHERE SCHEMA_NAME='INFORMATION_SCHEMA' "
-                + "AND Catalog_Name IS NULL")
-        .build();
-
     private enum StatementResultType {
       RESULT_SET,
       UPDATE_COUNT,
@@ -329,30 +318,12 @@ public class MockSpannerServiceImpl extends SpannerImplBase implements MockGrpcS
       return new StatementResult(statement, exception);
     }
 
-    /** Creates a result for the query that detects the dialect that is used for the database. */
+    /**
+     * Creates a result for the query that detects the dialect that is used for the database.
+     * Delegates to {@link #detectMetadataResult(Dialect)} as dialect detection uses database metadata.
+     */
     public static StatementResult detectDialectResult(Dialect resultDialect) {
-      return StatementResult.query(
-          DETERMINE_DIALECT_STATEMENT,
-          ResultSet.newBuilder()
-              .setMetadata(
-                  ResultSetMetadata.newBuilder()
-                      .setRowType(
-                          StructType.newBuilder()
-                              .addFields(
-                                  Field.newBuilder()
-                                      .setName("DIALECT")
-                                      .setType(Type.newBuilder().setCode(TypeCode.STRING).build())
-                                      .build())
-                              .build())
-                      .build())
-              .addRows(
-                  ListValue.newBuilder()
-                      .addValues(
-                          com.google.protobuf.Value.newBuilder()
-                              .setStringValue(resultDialect.toString())
-                              .build())
-                      .build())
-              .build());
+      return detectMetadataResult(resultDialect);
     }
 
     /**
@@ -738,7 +709,7 @@ public class MockSpannerServiceImpl extends SpannerImplBase implements MockGrpcS
   private SimulatedExecutionTime streamingReadExecutionTime = NO_EXECUTION_TIME;
 
   public MockSpannerServiceImpl() {
-    putStatementResult(StatementResult.detectDialectResult(Dialect.GOOGLE_STANDARD_SQL));
+    putStatementResult(StatementResult.detectMetadataResult(Dialect.GOOGLE_STANDARD_SQL));
   }
 
   private String generateSessionName(String database) {
